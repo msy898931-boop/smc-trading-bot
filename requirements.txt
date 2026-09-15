@@ -1,3 +1,5 @@
-pyTelegramBotAPI
-Flask
-gunicorn
+Flask==3.0.0
+pyTelegramBotAPI==4.14.0
+yfinance==0.2.36
+pandas==2.2.0
+requests==2.31.0
