@@ -1,54 +1,58 @@
 import os
 import time
 import telebot
-from flask import Flask, request
+from telebot import types
 
-# TOKEN و Chat ID الخاص بك
 TOKEN = os.environ.get('BOT_TOKEN', '8733597181:AAE9JKx6qazg0oFx8MV7k6xu1ePiSjszNwk')
-CHAT_ID = "933571066"
-
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
-app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "SMC Trading Bot is Active & Ready!"
+# إنشاء الأزرار التفاعلية الجاهزة
+def main_keyboard():
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn_start = types.KeyboardButton("🚀 تشغيل البوت")
+    btn_smc = types.KeyboardButton("📊 تحليل SMC")
+    btn_info = types.KeyboardButton("ℹ️ معلومات الحساب")
+    markup.add(btn_start, btn_smc, btn_info)
+    return markup
 
-# نقطة استقبال رسائل التليجرام مباشرة عبر Webhook
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "OK", 200
-    return "Unsupported", 415
-
-# أمر /start
+# الاستجابة لأمر /start أو زر التحديث
 @bot.message_handler(commands=['start'])
-def start_cmd(message):
+@bot.message_handler(func=lambda message: message.text == "🚀 تشغيل البوت")
+def send_welcome(message):
     text = (
         "👋 **أهلاً بك في بوت إشارات SMC!**\n\n"
-        f"🆔 **معرّف المحادثة (Chat ID):** `{message.chat.id}`\n\n"
-        "🟢 البوت يعمل الآن بنجاح ومستعد للتواصل معك 24/7."
+        f"🆔 **معرّف المحادثة (Chat ID):** `{message.chat.id}`\n"
+        "🟢 **الحالة:** البوت متصل وجاهز للعمل فوراً.\n\n"
+        "اختر من الأزرار في الأسفل للتحكم:"
     )
-    bot.reply_to(message, text)
+    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
 
-# أمر /smc
+# الاستجابة لزر تحليل SMC
 @bot.message_handler(commands=['smc'])
-def smc_cmd(message):
+@bot.message_handler(func=lambda message: message.text == "📊 تحليل SMC")
+def send_smc_info(message):
     text = (
-        "🧠 **ملخص مفاهيم Smart Money Concepts (SMC):**\n\n"
+        "🧠 **مفاهيم Smart Money Concepts (SMC):**\n\n"
         "1️⃣ **Order Block (OB):** مناطق تجميع السيولة والمؤسسات المالية.\n"
         "2️⃣ **Fair Value Gap (FVG):** الفجوات السعرية الناتجة عن الزخم السريع.\n"
         "3️⃣ **BOS / CHOCH:** كسر الهيكل وتغير اتجاه السوق."
     )
-    bot.reply_to(message, text)
+    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
 
-# رد على أي رسالة أخرى
+# الاستجابة لزر معلومات الحساب
+@bot.message_handler(func=lambda message: message.text == "ℹ️ معلومات الحساب")
+def send_info(message):
+    text = f"👤 **معلوماتك:**\n- **Chat ID:** `{message.chat.id}`\n- **الاسم:** {message.from_user.first_name}"
+    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
+
+# الرد على أي نص آخر
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
-    bot.reply_to(message, f"وصلت رسالتك: '{message.text}'\nاستخدم الأمر /smc للتحليل.")
+    bot.reply_to(message, f"استلمت رسالتك: '{message.text}'\nاستخدم الأزرار في الأسفل للتحكم.", reply_markup=main_keyboard())
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # إلغاء أي Webhook قديم لتفادي التعارض
+    bot.remove_webhook()
+    time.sleep(1)
+    print("Bot is polling...")
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
