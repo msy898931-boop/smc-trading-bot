@@ -1,16 +1,24 @@
 import os
+import time
+import threading
+import pandas as pd
+import yfinance as yf
 import telebot
 from flask import Flask, request
 
-TOKEN = os.environ.get('BOT_TOKEN')
+# 1. إعدادات التليجرام والسيرفر
+TOKEN = os.environ.get('BOT_TOKEN', '8733597181:AAE9JKx6qazg0oFx8MV7k6xu1ePiSjszNwk')
+CHAT_ID = "933571066"  # Chat ID الخاص بك
+
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
 
+# 2. الصفحة الرئيسية للسيرفر
 @app.route('/')
 def home():
-    return "SMC Trading Bot is Live & Ready!"
+    return "SMC Trading Bot is Active & Running Fully Automated!"
 
-# استقبال التحديثات من تليجرام وتمريرها للبوت
+# 3. معالجة الـ Webhook
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -18,30 +26,81 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return "OK", 200
-    return "Unsupported Media Type", 415
+    return "Unsupported", 415
 
-# أمر /start
+# 4. أوامر البوت المباشرة
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
-    welcome_text = (
-        "📊 **مرحباً بك في بوت تداول SMC** 📊\n\n"
-        "البوت يعمل الآن ومربوط بنجاح 24/7.\n"
-        f"معرّف المحادثة الخاص بك (Chat ID):\n`{message.chat.id}`\n\n"
-        "احفظ هذا الرقم لاستخدامه في إرسال التنبيهات التلقائية."
+    text = (
+        "👋 **أهلاً بك في بوت إشارات SMC الآلي!**\n\n"
+        f"🆔 **Chat ID:** `{message.chat.id}`\n\n"
+        "🟢 البوت يعمل الآن تلقائياً في الخلفية ويفحص الأسواق (الذهب والعملات) لإرسال التنبيهات مباشرة."
     )
-    bot.reply_to(message, welcome_text)
+    bot.reply_to(message, text)
 
-# أمر /smc
 @bot.message_handler(commands=['smc'])
-def smc_info(message):
-    smc_text = (
-        "🧠 **ملخص مفاهيم Smart Money Concepts (SMC):**\n\n"
-        "1️⃣ **Order Blocks (OB):** مناطق تجميع العقود للمؤسسات المالية.\n"
-        "2️⃣ **Fair Value Gap (FVG):** الفجوات السعرية الناتجة عن الحركة السريعة.\n"
-        "3️⃣ **Break of Structure (BOS):** كسر الهيكل لاستمرار الاتجاه.\n"
-        "4️⃣ **Change of Character (CHOCH):** تغيير الاتجاه والتحول الهيكلي."
+def smc_cmd(message):
+    text = (
+        "🧠 **مفاهيم SMC المعتمدة في التحليل الآلي:**\n\n"
+        "1️⃣ **FVG (Fair Value Gap):** الفجوات السعرية الناتجة عن الزخم القوي.\n"
+        "2️⃣ **Order Block (OB):** مناطق تجميع السيولة للمؤسسات المالية."
     )
-    bot.reply_to(message, smc_text)
+    bot.reply_to(message, text)
+
+# 5. خوارزمية الفحص الآلي للأسواق (SMC Scanner)
+def analyze_smc(symbol_name, ticker_symbol):
+    try:
+        # جلب أحدث بيانات السعر (فريم 15 دقيقة)
+        df = yf.download(tickers=ticker_symbol, period="2d", interval="15m", progress=False)
+        if len(df) < 5:
+            return
+
+        # تنظيف الأعمدة
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        c_close = df['Close'].iloc[-1]
+        
+        # فحص فجوة FVG الشرائية (Bullish FVG)
+        # الشمعة الأولى أدنى سعرها أعلى من أعلى سعر للشمعة الثالثة
+        high_3 = df['High'].iloc[-3]
+        low_1 = df['Low'].iloc[-1]
+        
+        if low_1 > high_3:
+            gap_size = round(low_1 - high_3, 2)
+            alert_msg = (
+                f"🚨 **إشارة SMC جديدة (Fair Value Gap)!**\n\n"
+                f"📌 **الزوج:** {symbol_name}\n"
+                f"📈 **النوع:** فجوة شرائية (Bullish FVG)\n"
+                f"💰 **السعر الحالي:** {round(c_close, 2)}\n"
+                f"📏 **حجم الفجوة:** {gap_size}\n"
+                f"⏰ **التوقيت:** تلقائي من السيرفر"
+            )
+            bot.send_message(CHAT_ID, alert_msg)
+    except Exception as e:
+        print(f"Error scanning {symbol_name}: {e}")
+
+# 6. المراقبة المستمرة (تشتغل كل 5 دقائق)
+def background_scanner():
+    symbols = {
+        "الذهب (XAU/USD)": "GC=F",
+        "اليورو/دولار (EUR/USD)": "EURUSD=X",
+        "الباوند/دولار (GBP/USD)": "GBPUSD=X"
+    }
+    
+    # انتظار دقيقة واحدة عند الإقلاع
+    time.sleep(60)
+    
+    while True:
+        for name, ticker in symbols.items():
+            analyze_smc(name, ticker)
+            time.sleep(5)  # فاصل بسيط بين الأزواج
+            
+        time.sleep(300)  # إعادة الفحص كل 5 دقائق
+
+# تشغيل الفحص في الخلفية
+thread = threading.Thread(target=background_scanner, daemon=True)
+thread.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
